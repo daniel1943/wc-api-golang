@@ -71,6 +71,9 @@ func NewClient(store, ck, cs string, option *Option) (*Client, error) {
 }
 
 func (c *Client) basicAuth(params url.Values) string {
+	if params == nil {
+		params = url.Values{}
+	}
 	params.Add("consumer_key", c.ck)
 	params.Add("consumer_secret", c.cs)
 	return params.Encode()
@@ -114,14 +117,16 @@ func (c *Client) oauthSign(method, endpoint, params string) string {
 	return base64.StdEncoding.EncodeToString(signatureBytes)
 }
 
-func (c *Client) request(method, endpoint string, params url.Values, data interface{}) (io.ReadCloser, error) {
+func (c *Client) request(method, endpoint string, params url.Values, data io.Reader) (io.ReadCloser, error) {
 	urlstr := c.storeURL.String() + endpoint
-	var body io.Reader
+
+	body := data
 	if c.storeURL.Scheme == "https" {
 		urlstr += "?" + c.basicAuth(params)
 	} else {
 		urlstr += "?" + c.oauth(method, urlstr, params)
 	}
+	fmt.Println(body)
 	switch method {
 	case http.MethodPost, http.MethodPut:
 	case http.MethodDelete, http.MethodGet, http.MethodOptions:
@@ -129,6 +134,7 @@ func (c *Client) request(method, endpoint string, params url.Values, data interf
 		return nil, fmt.Errorf("Method is not recognised: %s", method)
 	}
 	req, err := http.NewRequest(method, urlstr, body)
+	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		return nil, err
 	}
@@ -136,17 +142,17 @@ func (c *Client) request(method, endpoint string, params url.Values, data interf
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusOK {
+	if (resp.StatusCode != http.StatusOK) && (resp.StatusCode != http.StatusCreated) {
 		return nil, fmt.Errorf("Request failed: %s", resp.Status)
 	}
 	return resp.Body, nil
 }
 
-func (c *Client) Post(endpoint string, data interface{}) (io.ReadCloser, error) {
+func (c *Client) Post(endpoint string, data io.Reader) (io.ReadCloser, error) {
 	return c.request("POST", endpoint, nil, data)
 }
 
-func (c *Client) Put(endpoint string, data interface{}) (io.ReadCloser, error) {
+func (c *Client) Put(endpoint string, data io.Reader) (io.ReadCloser, error) {
 	return c.request("PUT", endpoint, nil, data)
 }
 
